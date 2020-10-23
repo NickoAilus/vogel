@@ -1,2 +1,2 @@
 # vogel
-Tool for creating web servers on Vlang
+A framework for building web servers in V
