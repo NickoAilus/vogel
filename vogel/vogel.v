@@ -13,28 +13,31 @@ import time
 // can't touch this! tuuu tu tu tu, tu tu, tu tu. can't touch this - tuuu tu tu tu
 
 pub const (
-	server = "VOGEL 0. 0. 1"
+	server = "VOGEL 0. 0. 2"
 )
 
 // Route
 // -=-=-
 // You can attach a URL to your function using route.
 
-pub struct Route { function fn()Response }
+pub struct Route {
+	name string
+	function fn()Response
+}
 
 // App
 // -=-
 // Most important thing of this framework.
 
 pub struct App {
-	mut: functions map[string]Route
-	routes map[string]bool
+	mut: routes map[string]Route
 	port int
 }
 
-pub fn (mut a App) route(r string, f fn()Response) {
-	a.functions[r] = Route{f}
-	a.routes[r] = true
+pub fn (mut a App) set_routes(r []Route) {
+	for route in r {
+		a.routes[route.name] = route
+	}
 }
 
 pub fn (mut a App) run() {
@@ -58,10 +61,11 @@ pub fn (mut a App) run() {
 struct Request { socket net.Socket }
 
 pub fn (r Request) str() string {
+	r_clone := r
 	mut out := ""
 	mut buffer := ""
 	for {
-		buffer = r.socket.read_line()
+		buffer = r_clone.socket.read_line()
 		if buffer == "\r\n" { break } else { out += buffer }
 	}
 	return out
@@ -69,14 +73,17 @@ pub fn (r Request) str() string {
 
 fn (a &App) handle(r Request) {
 	println("📩 Got a request, ${time.now().utc_string()}")
-	mut url := r.socket.read_line()
-	url = url[5..url.len - 11]
-	url_splitted := url.split('/')
-	// println("$r")
+	//println("$r")
+
+	// TODO: improve routing mechanism
+
+	input_url := r.socket.read_line()
+	url := input_url[4..input_url.len - 11]
+	//println("$url")
 
 	mut response := Response{}
-	if a.routes[url_splitted[0]] {
-		response = a.functions[url_splitted[0]].function()
+	if a.routes[url].name != "" {
+		response = a.routes[url].function()
 	} else {
 		response = default(404)
 	}
@@ -84,17 +91,16 @@ fn (a &App) handle(r Request) {
 	r.socket.send_string("$response")
 
 	println("📨 Sent a response, ${time.now().utc_string()}")
-	// println("$response")
+	println("$response")
 
 	r.socket.close() // or {}
 }
 
-// -=-=-=-=-
 // Response
 // -=-=-=-=-
-// Browser sends a request to server, server sends a response to browser. Sounds simple enough, isn't it?Header{""}
+// Browser sends a request to server, server sends a response to browser. Sounds simple enough, isn't it?
 
-struct Response {
+pub struct Response {
 	status http.Status
 	headers []Header
 	data string
@@ -124,7 +130,7 @@ pub fn default(status http.Status) Response {
 
 pub fn json(status http.Status, j string) Response {
 	return Response{
-		200,
+		status,
 		[
 			Header{"Connection", "close"},
 			Header{"Content-Type", "application/json; charset=utf-8"}
@@ -133,12 +139,22 @@ pub fn json(status http.Status, j string) Response {
 	}
 }
 
-// -=-=-=-
+pub fn text(status http.Status, t string) Response {
+	return Response{
+		status,
+		[
+			Header{"Connection", "close"},
+			Header{"Content-Type", "text/plain; charset=utf-8"}
+		],
+		t
+	}
+}
+
 // Header
 // -=-=-=-
 // Requests and responses contain headers.
 
-struct Header {
+pub struct Header {
 	header string
 	content string
 }
